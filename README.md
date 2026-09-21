@@ -1,2 +1,92 @@
-Firewall Logo Java Python Kafka Redis Elasticsearch Docker **A zero-trust API gateway that inspects streaming traffic in real time.** Detects and blocks credential stuffing and business-logic abuse before it reaches internal microservices using an ensemble ML threat-scoring engine. • [📖 Full Build Guide](docs/BUILD_GUIDE.pdf) •
---- ## 📸 Architecture & Flow | System Architecture | Request Flow | |-----------|---------------| | ![Architecture](architecture.jpg)[cite: 1] | ![Request Flow](request_flow.jpg)[cite: 2] | --- ## ✨ Features - **🧠 Behavioral Threat Scoring** — Scores sequences and semantics (e.g., tampered prices) using Isolation Forest + XGBoost, moving beyond simple signature-based WAFs. - **⚡ Synchronous Fast Path** — Redis blocklist and sliding-window rate counters deliver sub-25ms enforcement, escalating to a bounded ML call only for high-risk endpoints. - **🌊 Asynchronous Full-Stream Path** — Kafka consumer analyzes every request with the full ensemble model and adaptively updates the Redis blocklist with zero added ML latency. - **🛡️ Zero-Trust Ingress** — Built on Spring Cloud Gateway for robust dynamic routing and strict JWT authentication. - **📊 Comprehensive Audit Trail** — Elasticsearch and Kibana integration for full traffic and decision logging. - **🐳 Production-Ready Deployment** — Full Docker Compose local orchestration with a sample Kubernetes manifest path included. --- ## 🛠️ Tech Stack | Layer | Technology | Purpose | |-------|-----------|---------| | **Routing** | Spring Boot / Spring Cloud Gateway | Zero-trust ingress: JWT auth, dynamic routing | | **Threat Engine** | FastAPI + scikit-learn + XGBoost | Ensemble anomaly/attack scoring | | **Ingestion** | Apache Kafka (KRaft) | Queues request telemetry for non-blocking analysis | | **State Tracking** | Redis | Live blocklist + sliding-window rate counters, sub-ms | | **Audit Logging** | Elasticsearch + Kibana | Full traffic + decision audit trail | | **Deployment** | Docker Compose / Kubernetes | Local orchestration / production path | --- ## 🚀 Quick Start ### Run in 3 Commands ```bash # 1. Clone the repo and prepare environment git clone cd ai-api-security-firewall cp .env.example .env # NOTE: replace JWT_SECRET in .env with a random value before using this outside the demo # 2. Start infrastructure and build containers docker compose up -d --build ./scripts/setup_infra.sh # provisions Kafka topics + ES index template/ILM # 3. Authenticate to get a mock token curl -X POST http://localhost:8080/api/auth/login \ -H "Content-Type: application/json" \ -d '{"username":"demo_user","password":"correct-horse-battery-staple"}' ``` --- ## 📂 Project Structure ``` ai-api-security-firewall/ │ ├── 🚪 gateway/ # Spring Boot zero-trust API gateway ├── 🧠 threat-engine/ # FastAPI + ensemble ML scoring service ├── 🗄️ audit-indexer/ # Kafka -> Elasticsearch bulk shipper ├── 🎭 mock-services/ # Stand-in auth/order microservices for the demo ├── 📊 elasticsearch/ # Index template + ILM policy ├── 📜 scripts/ # Attack simulations, load test, infra setup ├── ☸️ k8s/ # Sample production deployment manifest └── docker-compose.yml # Full local orchestration ``` --- ## ⚙️ How It Works (Simulation) ### 1. 🕵️ Simulate Attacks ```bash # Simulate credential stuffing on public endpoints python scripts/simulate_credential_stuffing.py --target http://localhost:8080 # Simulate business logic abuse on protected endpoints python scripts/simulate_business_logic_abuse.py --target http://localhost:8080 --token ``` ### 2. 🔍 Verify Interception ```bash # Query the Elasticsearch audit trail to verify blocks python scripts/query_audit_trail.py --es http://localhost:9200 # Or visualize blocked traffic via Kibana # Open http://localhost:5601 ``` --- ## ⚠️ Known Limitations - **Synthetic Training Data** — The model is trained on synthetic data with clean class separation. Real traffic overlaps far more; retrain on real, labeled traffic before trusting thresholds in production. - **Manual Baselines** — `numeric-baselines` in `application.yml` are currently hand-configured per field. A real deployment should learn and calibrate these dynamically from historical data. - **Latency Protection** — Features like `distinct_endpoints_60s` and `geo_velocity_kmph` are stubbed on the synchronous path to protect the latency budget. - **mTLS Absence** — There is no mTLS between internal services in the Compose demo (see `k8s/` and the write-up's Production Hardening section for solutions). --- ## 📄 License This project is open source and available under the [MIT License](LICENSE).
+# AI-Powered Distributed API Security Firewall
+
+A zero-trust API gateway that inspects streaming traffic in real time to detect
+and block credential stuffing and business-logic abuse **before** it reaches
+internal microservices — combining a Spring Boot ingress layer, a Kafka-backed
+streaming pipeline, Redis-based sub-millisecond enforcement, and an ensemble
+ML threat-scoring engine (Isolation Forest + XGBoost).
+
+![architecture](docs/architecture.png)
+
+## Why this exists
+
+Signature-based WAFs catch known attack strings. They cannot catch a
+*sequence* of individually-valid requests (credential stuffing) or a
+*single* request whose fields are semantically wrong but syntactically
+perfect (a tampered price or a negative quantity). This project scores
+**behavior**, not just payload shape, and does it at two speeds:
+
+- **Synchronous, sub-25ms path** — Redis blocklist + rate counters, escalating
+  to a bounded ML call only for high-risk endpoints.
+- **Asynchronous, full-stream path** — a Kafka consumer scores every request
+  with the full ensemble model and adaptively updates the Redis blocklist, so
+  the *next* request from an offending identity is blocked on the fast path
+  with zero added ML latency.
+
+## Stack
+
+| Component | Technology | Role |
+|---|---|---|
+| Ingestion | Apache Kafka (KRaft) | Queues request telemetry for non-blocking analysis |
+| State tracking | Redis | Live blocklist + sliding-window rate counters, sub-ms |
+| Routing | Spring Boot / Spring Cloud Gateway | Zero-trust ingress: JWT auth, dynamic routing |
+| Threat engine | FastAPI + scikit-learn + XGBoost | Ensemble anomaly/attack scoring |
+| Audit logging | Elasticsearch + Kibana | Full traffic + decision audit trail |
+| Deployment | Docker Compose (+ sample K8s manifest) | Local orchestration / production path |
+
+## Quickstart
+
+```bash
+git clone <this-repo>
+cd ai-api-security-firewall
+docker compose up -d --build
+./scripts/setup_infra.sh          # provisions Kafka topics + ES index template/ILM
+
+# get a token
+curl -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"demo_user","password":"correct-horse-battery-staple"}'
+
+# simulate attacks
+python scripts/simulate_credential_stuffing.py --target http://localhost:8080
+python scripts/simulate_business_logic_abuse.py --target http://localhost:8080 --token <JWT>
+
+# verify the pipeline actually caught them
+python scripts/query_audit_trail.py --es http://localhost:9200
+# or open Kibana at http://localhost:5601
+```
+
+## Repository layout
+
+```
+gateway/            Spring Boot zero-trust API gateway
+threat-engine/       FastAPI + ensemble ML scoring service
+audit-indexer/       Kafka -> Elasticsearch bulk shipper
+mock-services/        Stand-in auth/order microservices for the demo
+elasticsearch/       Index template + ILM policy
+scripts/             Attack simulations, load test, infra setup
+k8s/                 Sample production deployment manifest
+docker-compose.yml   Full local orchestration
+```
+
+![Request-Flow](docs/request_flow.png)
+## Full write-up
+
+See `docs/BUILD_GUIDE.pdf` for the complete architecture rationale, design
+trade-offs, ML methodology, and a walkthrough of every file in this repo.
+
+## Known limitations (read before you claim this is production-ready)
+
+- The model is trained on **synthetic** data with clean class separation —
+  real traffic will overlap far more; retrain on real, labeled traffic before
+  trusting the thresholds.
+- `numeric-baselines` in `application.yml` are hand-configured per field; a
+  real deployment should learn/calibrate these from historical data.
+- `distinct_endpoints_60s` and `geo_velocity_kmph` are stubbed on the
+  synchronous path to protect the latency budget — see the write-up.
+- No mTLS between internal services in the Compose demo; see `k8s/` and the
+  write-up's Production Hardening section.
+
+## License
+
+MIT — see `LICENSE`.
