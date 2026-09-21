@@ -1,0 +1,24 @@
+{
+  "index_patterns": ["api-audit-events-*"],
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "index.lifecycle.name": "api-audit-ilm-policy"
+    },
+    "mappings": {
+      "properties": {
+        "request_id":       { "type": "keyword" },
+        "client_ip":        { "type": "ip" },
+        "endpoint":         { "type": "keyword" },
+        "method":           { "type": "keyword" },
+        "timestamp":        { "type": "date" },
+        "isolation_score":  { "type": "float" },
+        "xgboost_score":    { "type": "float" },
+        "final_score":      { "type": "float" },
+        "decision":         { "type": "keyword" },
+        "reason":           { "type": "text" }
+      }
+    }
+  }
+}

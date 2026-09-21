@@ -1,0 +1,76 @@
+# Illustrative deployment manifest; replace the image reference before use.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-sec-gateway
+  labels:
+    app: ai-sec-gateway
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ai-sec-gateway
+  template:
+    metadata:
+      labels:
+        app: ai-sec-gateway
+    spec:
+      containers:
+        - name: gateway
+          image: your-registry/ai-sec-gateway:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SPRING_DATA_REDIS_HOST
+              value: redis.default.svc.cluster.local
+            - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+              value: kafka.default.svc.cluster.local:9092
+            - name: FIREWALL_THREAT-ENGINE-URL
+              value: http://threat-engine.default.svc.cluster.local:8000
+            - name: FIREWALL_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: gateway-secrets
+                  key: jwt-secret
+          resources:
+            requests: { cpu: "250m", memory: "384Mi" }
+            limits: { cpu: "1", memory: "768Mi" }
+          readinessProbe:
+            httpGet: { path: /actuator/health, port: 8080 }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /actuator/health, port: 8080 }
+            initialDelaySeconds: 30
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-sec-gateway
+spec:
+  selector:
+    app: ai-sec-gateway
+  ports:
+    - port: 80
+      targetPort: 8080
+  type: LoadBalancer
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ai-sec-gateway-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ai-sec-gateway
+  minReplicas: 3
+  maxReplicas: 12
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 65
