@@ -75,7 +75,7 @@ docker-compose.yml   Full local orchestration
 See `docs/BUILD_GUIDE.pdf` for the complete architecture rationale, design
 trade-offs, ML methodology, and a walkthrough of every file in this repo.
 
-## Known limitations (read before you claim this is production-ready)
+## Known limitations
 
 - The model is trained on **synthetic** data with clean class separation —
   real traffic will overlap far more; retrain on real, labeled traffic before
@@ -89,4 +89,4 @@ trade-offs, ML methodology, and a walkthrough of every file in this repo.
 
 ## License
 
-MIT — see `LICENSE`.
+MIT.
